@@ -1,0 +1,70 @@
+# Phase 0 provider smoke test.
+#
+# Not a headline config. Runs the hand-built d=3 fixture in loopguard/tools/smoke.py
+# against both models to verify tool-calling fidelity before a provider is
+# committed to (TRD 14). Its results are never reported.
+#
+# `loopguard smoke --provider {together|groq|fireworks}` overrides provider,
+# base_url, api_key_env, and both model strings from loopguard/providers.py, so
+# all three candidates can be compared without editing this file.
+
+schema_version: "1.0"
+
+semantic:
+  task:
+    template: smoke_fixture_v1
+    depths: [3]
+    tasks_per_depth: 1
+    repeats: 1
+    calibration_lock_hash: null
+
+  arm: baseline
+
+  provider:
+    name: together
+    base_url: https://api.together.xyz/v1
+
+  models:
+    - id: llama-3.3-70b
+      provider_model: meta-llama/Llama-3.3-70B-Instruct-Turbo
+    - id: qwen3
+      provider_model: Qwen/Qwen3-235B-A22B-fp8-tput
+
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    max_tokens: 1024
+    seed_policy: derived
+
+  loop:
+    max_steps: null # -> 2*3+4 = 10
+    max_completion_tokens: 4000
+
+  tools:
+    exploration_budget_per_hop: 2
+    tags:
+      lookup_service: resolving
+      lookup_datacenter: resolving
+      lookup_region: resolving
+      lookup_service_legacy: resolving
+      search_entities: exploratory
+      list_regions: exploratory
+      submit_answer: terminal
+
+  prompt:
+    version: baseline_v1
+    path: prompts/baseline_v1.txt
+
+runtime:
+  out_dir: ../runs
+  api_key_env: TOGETHER_API_KEY
+  rate_limits:
+    max_concurrency: 1
+    requests_per_minute: 30
+    tokens_per_minute: 100000
+  retry:
+    max_attempts: 3
+    base_delay_s: 1.0
+    max_delay_s: 15.0
+  max_spend_usd: 1.0
+  log_level: INFO

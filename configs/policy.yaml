@@ -1,0 +1,18 @@
+# CI gate thresholds (PRD 8). Consumed by `loopguard gate` -- Phase 5.
+#
+# require_significance stops the gate flapping on noise; min_episodes stops it
+# passing vacuously on a truncated run. Both are load-bearing for CI trust: a
+# gate that passes when it cannot decide is worse than no gate.
+
+thresholds:
+  aggregate_failure_rate: { max_increase_pp: 3.0 }
+  category.CONTEXT_POLLUTION: { max_increase_pp: 2.0 }
+  category.HALLUCINATION: { max_increase_pp: 1.0 }
+  per_depth:
+    "5": { max_increase_pp: 5.0 }
+
+# Only fail on deltas whose CI excludes zero.
+require_significance: true
+
+# Refuse to gate on an underpowered run: exit 2, never a silent pass.
+min_episodes: 200

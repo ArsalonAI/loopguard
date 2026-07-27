@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # .python-version is tracked: the analysis environment is part of the
+      # deliverable, so CI runs the same interpreter as local development.
+      - run: uv sync --locked
+
+      - name: ruff (lint)
+        run: uv run ruff check .
+
+      - name: ruff (format)
+        run: uv run ruff format --check .
+
+      - name: mypy
+        # Strict on loopguard/schemas and loopguard/grading (TRD 1) -- where a
+        # silent type error becomes a wrong number.
+        run: uv run mypy loopguard
+
+      - name: pytest
+        # Live-provider tests are marked and excluded by default (TRD 12); the
+        # agent loop is exercised through ScriptedClient/ReplayClient instead.
+        run: uv run pytest -q
+
+  # Phase 5 (TRD 13): on PRs touching loopguard/agent/** or loopguard/generate/**,
+  # run the reduced-matrix `loopguard gate` against a committed baseline summary,
+  # plus a deliberately-regressed fixture run so the gate's failure path is itself
+  # tested. Nightly runs the full matrix.
+  #
+  # Phase 6: dashboard typecheck + build.
