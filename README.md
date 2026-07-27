@@ -99,7 +99,6 @@ Inference: hosted open-weight models over the OpenAI-compatible wire format
 
 ---
 
-**Arsalon** — arsalon.ai@gmail.com
-LinkedIn: `<add link>` · Site: `<add link>`
+**Arsalon Amini** — [LinkedIn](https://www.linkedin.com/in/arsalonamini/) · arsalon.ai@gmail.com
 
 A side project on agent evaluation methodology. Feedback and disagreement welcome — particularly on the experimental design, which is the part worth getting right.
