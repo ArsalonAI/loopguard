@@ -10,7 +10,9 @@ Two documents, different jobs. `prd.md` is the source of truth for scope, experi
 
 ## Stack (decided in `trd.md` §1)
 
-Python 3.11+ with **uv**, Pydantic v2 for config and schemas, the `openai` SDK pointed at a hosted OpenAI-compatible base URL, scipy/statsmodels for statistics, pytest, ruff, mypy (strict on `loopguard/schemas` and `loopguard/grading`). Dashboard is Vite + React + TypeScript with Recharts, pnpm, static export.
+Python 3.11+ with **uv**, Pydantic v2 for config and schemas, scipy/statsmodels for statistics, pytest, ruff, mypy (strict on `loopguard/schemas` and `loopguard/grading`). Dashboard is Vite + React + TypeScript with Recharts, pnpm, static export.
+
+**Models under test are open-weight, always.** Provider access uses the **OpenAI-compatible wire format** (`POST /v1/chat/completions`) — the de facto standard for open-weight serving, spoken by Together, Groq, Fireworks, vLLM, and Ollama. The `openai` package appears in the dependency list purely as an HTTP client for that format, pointed at a provider `base_url`; no OpenAI model, key, or service is involved. Do not read that dependency as a vendor choice, and do not propose swapping the models under test for closed ones (PRD §2 non-goals). The judge is the sole exception — see below.
 
 Planned CLI surface — `loopguard run | grade | report | diff | gate` (PRD §8, TRD §10). **Not yet implemented.** Once Phase 0 lands, this file should gain a Commands section covering: one episode end-to-end, one matrix cell, grading a run, judge calibration, and running a single test.
 
@@ -35,6 +37,8 @@ These are the design's validity conditions. Violating one does not produce a bug
 **Failures are attributed to the first divergence from the gold trace**, not the final answer. `first_error_hop` is a reported quantity, not a debug field — it is what distinguishes "depth degrades reasoning" from "depth offers more chances to fail."
 
 **The judge never grades correctness.** Correctness is exact-match against gold, normalized for case/whitespace/punctuation but never fuzzy-matched — fuzzy matching hands the correctness decision to the resolver. In production the judge sees only `AMBIGUOUS` episodes, though it must remain runnable on any episode since calibration spans mechanically-resolved ones too. Two pre-committed gates: mechanical resolution covers ≥80% of failed episodes, and judge/human Cohen's κ ≥ 0.70 for judge labels to enter headline numbers. The κ gate is **enforced in code** — below threshold, judge labels are auto-relabeled `UNRESOLVED`. It is deliberately not left to discipline, because the temptation to accept a 0.68 will be real.
+
+The judge is the one component permitted a **closed model** — it is not under test and labels only the residual. It must not be either model under test, it is configured with its own `base_url`/key independent of the harness provider, and the κ gate applies identically. The cost is that judge-assigned labels are not exactly replicable without that vendor's access; this is a stated limitation in the writeup (PRD §5 Phase 7), not a silent one.
 
 **Exploration is not tool misuse.** Tools are tagged `exploratory` or `resolving`; calls to exploratory tools don't advance the gold-hop pointer or count as divergence, up to `exploration_budget`. Without this, every reasonable `search_entities` call inflates `TOOL_MISUSE`. The budget is a genuine researcher degree of freedom — it is frozen with the calibration lock and sensitivity-checked at ±1 in Phase 2.
 
@@ -66,7 +70,7 @@ Seeds derive deterministically from the config hash (`config_hash → task_seed 
 
 ## Phase order and cut lines
 
-Phases run 0→7 (`prd.md` §5) and are sequential; the mitigation cannot be chosen before the baseline diagnosis exists. If time compresses, the cut order is **Phase 6 (dashboard) first, then Phase 5 (CLI)** — the study and taxonomy are the deliverable, the rest is packaging.
+Phases run 0→7 (`prd.md` §5) and are sequential; the mitigation cannot be chosen before the baseline diagnosis exists. If scope must be cut, the order is **Phase 6 (dashboard) first, then Phase 5 (CLI)** — the study and taxonomy are the deliverable, the rest is packaging.
 
 Mitigation selection is deliberately not specified in advance. It is chosen from baseline results under the §6 criteria, with a pre-registration note (mechanism + predicted direction and magnitude) committed **before** the mitigation arm runs.
 

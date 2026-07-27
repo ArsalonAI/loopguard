@@ -3,7 +3,6 @@
 **Status:** Draft v1
 **Owner:** Arsalon
 **Last updated:** 2026-07-27
-**Timeline:** 1–2 week focused sprint
 **Primary deliverable:** Research artifact + reproducible repo, with a static trace/results dashboard as the presentation layer
 
 ---
@@ -168,48 +167,49 @@ Judge model, prompt, and version are pinned and recorded in the run manifest.
 
 ## 5. Phases and deliverables
 
-### Phase 0 — Scaffolding *(~1 day)*
+### Phase 0 — Scaffolding
 - Repo structure, config schema, provider client behind one interface, run-manifest format (model string, decoding params, config hash, git SHA, timestamp, provider).
 - Trace format: append-only JSONL per episode capturing every message, tool call, tool response, token counts, and per-step wall-clock.
 - Provider smoke test: verify tool-calling fidelity on both models before committing to a provider.
 
 **Exit:** one end-to-end episode runs against both models and writes a valid trace.
 
-### Phase 1 — Task family + calibration *(~2 days)*
+### Phase 1 — Task family + calibration
 - Seeded graph/chain/distractor generator with gold-trace emission.
 - Tool implementations as pure functions over the graph.
 - Pilot runs and calibration to the 20–60% band; `calibration.lock.json` frozen and committed.
 
 **Exit:** frozen config, documented pilot results, generator unit tests (chain validity, distractor uniqueness, payload length-matching).
 
-### Phase 2 — Baseline run + taxonomy *(~2 days)*
+### Phase 2 — Baseline run + taxonomy
 - Execute the 1,200-episode matrix.
 - Mechanical resolver; measure the ambiguous residual and iterate until <20%.
 - Hand-label ≥100 episodes; run and calibrate the judge; report κ.
 
 **Exit:** per-depth, per-model failure-mode distributions with Wilson intervals; `first_error_hop` distributions; documented judge agreement.
 
-### Phase 3 — Diagnosis + mitigation *(~2–3 days)*
+### Phase 3 — Diagnosis + mitigation
 - Identify the dominant failure mode per depth, and the depth at which failure rate first crosses a meaningful threshold.
 - **Select one mitigation, data-driven.** Per direction, no candidate mitigation is named in this PRD. Selection is governed by criteria only (§6).
 - Re-run the mitigation arm on the *same task seeds* (paired).
 
 **Exit:** paired comparison on the targeted failure category, plus aggregate accuracy as a secondary number.
 
-### Phase 4 — Cost accounting *(~0.5 day)*
+### Phase 4 — Cost accounting
 - Token overhead (prompt + completion, per episode, by depth) and latency overhead (median, p90) for the mitigation arm vs baseline.
 - Framed as: *reliability points bought per 1k additional tokens*, per depth.
 
 **Exit:** the tradeoff table (§7).
 
-### Phase 5 — Regression CLI *(~1 day)*
+### Phase 5 — Regression CLI
 See §8.
 
-### Phase 6 — Dashboard *(~1.5 days)*
+### Phase 6 — Dashboard
 See §9.
 
-### Phase 7 — Writeup *(~1 day)*
+### Phase 7 — Writeup
 - Findings, method, judge calibration, limitations (synthetic-only, context-length confound, 2 models, n=40/cell, hosted-inference latency noise).
+- **Judge provenance limitation.** Every model under test is open-weight, but the judge may be a closed model (TRD §14). Exact replication of judge-assigned labels therefore requires that vendor's access. Two things bound the damage and both are committed to the repo: the judge touches only the ambiguous residual (≤20% of failures, §4.2), and the hand-labeled calibration fixture plus the reported κ let anyone check the judge's quality — or substitute their own judge and re-derive the residual — without trusting it.
 
 ---
 
@@ -279,7 +279,7 @@ min_episodes: 200             # refuse to gate on an underpowered run
 
 ## 9. Dashboard
 
-Static single-page app. **No backend, no server-side inference.** It reads the JSON artifacts a run produces. This is what makes it deployable to S3 + CloudFront as static files and what keeps it inside a 1–2 week sprint.
+Static single-page app. **No backend, no server-side inference.** It reads the JSON artifacts a run produces. This is what makes it deployable to S3 + CloudFront as static files and what keeps it in scope.
 
 **Views:**
 1. **Depth curve** — failure rate vs depth, one line per model, CI bands.
@@ -290,7 +290,7 @@ Static single-page app. **No backend, no server-side inference.** It reads the J
 
 **Build:** Vite + React, static export. Run artifacts published alongside as JSON. Deployment target S3 + CloudFront; `aws s3 sync` in a make target. Local usability (`vite preview` against a run directory) is a hard requirement — deployment is optional convenience, never a prerequisite for using it.
 
-**Explicitly deferred:** live agent execution from the browser (the "sandbox" idea), auth, multi-tenant run storage, a query backend. These turn a static site into a service and are out of sprint scope. Noted in §10 as the natural v2.
+**Explicitly deferred:** live agent execution from the browser (the "sandbox" idea), auth, multi-tenant run storage, a query backend. These turn a static site into a service and are out of scope. Noted in §10 as the natural v2.
 
 ---
 
@@ -305,9 +305,9 @@ Static single-page app. **No backend, no server-side inference.** It reads the J
 | Hosted-inference latency noise swamps the latency claim | Token overhead is the primary cost metric; latency is secondary, reported as median/p90 across repeats, and caveated. |
 | Provider tool-calling quirks differ between the two models | Phase 0 smoke test before provider commitment; any per-model prompt adaptation is documented as a deviation from "byte-identical prompt". |
 | n=40/cell underpowers small effects | Stated up front. The writeup reports intervals and declines to narrate differences the data cannot resolve. |
-| Scope: dashboard + full study in 1–2 weeks | Dashboard is static-artifact-driven and last in sequence. If the sprint compresses, Phases 6 then 5 are the cut lines — the study and taxonomy are the deliverable. |
+| Scope: dashboard plus full study in one pass | Dashboard is static-artifact-driven and last in sequence. If scope must be cut, Phases 6 then 5 are the cut lines — the study and taxonomy are the deliverable. |
 
-**Open items for later decision (do not block the sprint):**
+**Open items for later decision (do not block Phase 0):**
 - Exact `N` for tool-set size — set during Phase 1 calibration.
 - Provider choice — Phase 0.
 - Whether a second mitigation arm fits — reassess after Phase 4.
@@ -317,7 +317,7 @@ Static single-page app. **No backend, no server-side inference.** It reads the J
 
 ## 11. Success criteria
 
-The project succeeds if, at the end of the sprint:
+The project succeeds if, at completion:
 
 1. A depth-vs-failure curve exists for both models where depth is the only manipulated variable, with the held-constant controls verifiable from committed config.
 2. Failures are attributed to modes, ≥80% mechanically, with judge agreement measured and reported.

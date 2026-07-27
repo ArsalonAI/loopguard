@@ -15,7 +15,7 @@ This document decides what the PRD deliberately left open and specifies the mech
 | Harness language | **Python 3.11+** | The statistics (Wilson, McNemar, trend tests), tokenizer access, and provider SDKs all live here. Nothing else is close for the analysis half. |
 | Package manager | **uv** | Lockfile-based, fast, single tool for venv + deps. Reproducibility of the analysis environment is part of the deliverable. |
 | Config | **YAML** on disk → **Pydantic v2** models in memory | Validation at load time, JSON-Schema export for free, and a canonical serialization for config hashing (§5.1). |
-| Provider access | **`openai` SDK pointed at the chosen base URL** | All three candidate providers (Together / Groq / Fireworks) expose OpenAI-compatible chat-completions with tool calling. One client, swap `base_url` + model string. |
+| Provider access | **OpenAI-compatible wire format**, via the `openai` package as HTTP client | The wire format is the de facto standard for open-weight serving; all three candidate providers speak it. One client, swap `base_url` + model string. See the note below. |
 | Stats | **scipy** + **statsmodels** | Wilson intervals, McNemar exact, Cochran–Armitage trend. Do not hand-roll. |
 | Test runner | **pytest** | Plus `pytest-xdist` for the generator property tests. |
 | Lint / format | **ruff** (lint + format) | Single tool, no black/isort split. |
@@ -23,6 +23,15 @@ This document decides what the PRD deliberately left open and specifies the mech
 | Dashboard | **Vite + React + TypeScript**, static export | Per PRD §9. No backend. |
 | Charts | **Recharts** | CI bands and stacked bars without a d3 build-out. |
 | Dashboard package manager | **pnpm** | |
+
+**On the `openai` package — no OpenAI model is involved.** "OpenAI-compatible" names a *wire format*: `POST /v1/chat/completions` carrying a `messages` array, a `tools` array, and a `model` string. It has become the de facto standard for serving open-weight models, spoken by Together, Groq, and Fireworks as well as local runtimes like vLLM and Ollama. The `openai` package is used here purely as a well-maintained HTTP client for that format — the way `requests` is used to call a non-Python server. No OpenAI model, key, endpoint, or service is part of this project, and no data reaches OpenAI.
+
+```python
+client = OpenAI(base_url="https://api.together.xyz/v1", api_key=TOGETHER_API_KEY)
+client.chat.completions.create(model="meta-llama/Llama-3.3-70B-Instruct-Turbo", ...)
+```
+
+**Every model under test is open-weight** (PRD §2 non-goals: closed/frontier models are out of scope). The single exception is the LLM judge, which is not under test and may be a closed model — see §8 and §14.
 
 **Reversibility note.** The Python/TypeScript split is cheap to change now and expensive after Phase 2, once traces exist in a format the analysis code assumes. Raise objections before Phase 0 exits.
 
@@ -229,7 +238,7 @@ Three requirements that exist specifically to keep retries from corrupting resul
 
 ### 6.4 Resumability and cost control
 
-`loopguard run` skips any episode whose trace file has a parseable footer. A 1,200-episode matrix will not survive a two-week sprint without this.
+`loopguard run` skips any episode whose trace file has a parseable footer. A 1,200-episode matrix cannot be restarted from scratch on every interruption.
 
 Before execution, `run` prints an episode count and a cost estimate and requires `--yes` for non-interactive execution. A hard `max_spend_usd` in runtime config aborts the run when the running token total crosses it.
 
@@ -286,6 +295,8 @@ Every label records: the divergent step index, the rule number that fired, the c
 ## 8. Judge
 
 **Interface constraint:** the judge must be runnable on *any* episode, not only `AMBIGUOUS` ones — PRD §4.3 calibrates it against a stratified subset that includes mechanically-resolved episodes. In production grading it is invoked only on `AMBIGUOUS`; the two paths share one code path with different selection.
+
+**Provider independence.** The judge is configured with its own `base_url`, key, and model string, separate from the models under test. It is the one component permitted to use a closed model (§14) — it is not under test, it labels only the ambiguous residual, and its output is κ-gated regardless of provenance. `JudgePin` therefore records provider alongside model, prompt version, and prompt hash, so a judge swap is visible in the manifest diff rather than silent.
 
 - Judge sees the trace and the gold trace; it returns a category from the same enum plus a confidence. It never sees, and never emits, a correctness verdict.
 - Prompt is versioned and hashed into `JudgePin`. Changing the prompt without bumping the version is a defect.
@@ -369,6 +380,6 @@ Resolved at the phase indicated; none block starting Phase 0.
 |---|---|---|
 | Provider (Together / Groq / Fireworks) | 0 | Chosen on tool-calling fidelity in the smoke test, then rate limits. |
 | Tool-set size `N` | 1 | With `d_max = 5`, expect `N` in 8–12. Set during calibration. |
-| Judge model | 2 | Should not be one of the two models under test. |
+| ~~Judge model~~ **decided** | — | **May be a closed model.** It is not under test, sees only the ambiguous residual, and is κ-gated identically regardless of provenance — so judge strength is worth buying. Hard constraint: must not be either model under test. Cost: exact replication of judge-assigned labels requires that vendor's access (§8, PRD §5 Phase 7). Specific model chosen at Phase 2. |
 | `exploration_budget` default | 1 | Frozen with the calibration lock; sensitivity-checked at Phase 2 (§7.2). |
 | Trace cap for dashboard | 6 | Driven by payload size once real traces exist. |
