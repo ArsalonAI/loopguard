@@ -19,7 +19,10 @@ credentials.json
 runs/
 traces/
 *.jsonl
-!fixtures/**/*.jsonl        # hand-labeled judge-calibration set IS tracked
+# The hand-labeled judge-calibration set IS tracked -- it is human labour, not
+# regenerable output. Note: git has no inline comments, so this negation must
+# stay on a line of its own or it silently stops matching.
+!fixtures/**/*.jsonl
 cache/
 .cache/
 outputs/
@@ -41,7 +44,9 @@ dist/
 .venv/
 venv/
 env/
-.python-version
+# TRACKED: uv.lock pins packages but not the interpreter, and reproducibility of
+# the analysis environment is part of the deliverable (TRD 1).
+!.python-version
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

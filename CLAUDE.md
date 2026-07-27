@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-Pre-implementation: `prd.md`, `trd.md`, `.gitignore` only. **No source, no build system, no tests exist yet — do not infer working commands from this file.** The stack is decided (below) but not yet scaffolded; that is Phase 0.
+**Phase 0 landed; Phase 1 is next.** What exists: the config model and its three-tier hash, all artifact schemas, the append-only trace writer/reader, the agent loop, the OpenAI-compatible and network-free provider clients, the tool registry, a hand-built d=3 smoke fixture, and `loopguard smoke | config`. What does not: the generator (`loopguard/generate/`), the resolver and judge (`loopguard/grading/`), the statistics (`loopguard/stats/`), the report writer (`loopguard/report/`), and `loopguard run | grade | report | diff | gate` — those subcommands parse and exit 3 with the phase that owns them. Their package `__init__.py` files carry the contract each must satisfy.
+
+`loopguard/tools/smoke.py` is a **fixture, not the generator**. Phase 1 replaces it; do not extend it into one.
 
 Two documents, different jobs. `prd.md` is the source of truth for scope, experimental design, and success criteria — *what* and *why*. `trd.md` decides stack, schemas, and algorithms — *how*. Where they conflict, PRD wins on intent, TRD wins on mechanism. Read both before implementing; the constraints below are summaries, not substitutes.
 
@@ -14,7 +16,39 @@ Python 3.11+ with **uv**, Pydantic v2 for config and schemas, scipy/statsmodels 
 
 **Models under test are open-weight, always.** Provider access uses the **OpenAI-compatible wire format** (`POST /v1/chat/completions`) — the de facto standard for open-weight serving, spoken by Together, Groq, Fireworks, vLLM, and Ollama. The `openai` package appears in the dependency list purely as an HTTP client for that format, pointed at a provider `base_url`; no OpenAI model, key, or service is involved. Do not read that dependency as a vendor choice, and do not propose swapping the models under test for closed ones (PRD §2 non-goals). The judge is the sole exception — see below.
 
-Planned CLI surface — `loopguard run | grade | report | diff | gate` (PRD §8, TRD §10). **Not yet implemented.** Once Phase 0 lands, this file should gain a Commands section covering: one episode end-to-end, one matrix cell, grading a run, judge calibration, and running a single test.
+CLI surface — `loopguard run | grade | report | diff | gate` (PRD §8, TRD §10), plus `smoke` and `config` from Phase 0. See Commands below for what is wired up.
+
+## Commands
+
+Everything runs through `uv`; the interpreter is pinned by the tracked `.python-version`.
+
+```bash
+uv sync                                   # create/refresh the venv from uv.lock
+
+# One episode end-to-end, no network: exercises loop, tools, trace writer, manifest.
+uv run loopguard smoke --dry-run
+
+# The real Phase 0 exit criterion + provider selection (TRD §14). Needs a key in
+# .env for the candidate's api_key_env. Exit 0 iff both models produced usable
+# tool calls and reached submit_answer.
+uv run loopguard smoke --provider together      # | groq | fireworks
+uv run loopguard smoke --provider groq --model qwen3      # one model only
+uv run loopguard smoke --provider groq --qwen-model <str> # override a model string
+
+# Resolve a config, print both hashes, the episode count, and the first task seeds.
+uv run loopguard config --config configs/baseline.yaml
+uv run loopguard config --config configs/baseline.yaml --json
+
+uv run pytest -q                          # live-provider tests excluded by default
+uv run pytest -m live_provider            # hits a real endpoint; needs a key
+uv run pytest tests/test_hashing.py::test_mitigation_arm_keeps_task_seeds_but_changes_config_hash
+uv run ruff check . && uv run ruff format --check .
+uv run mypy loopguard                     # strict on schemas/ and grading/
+```
+
+Not yet wired: one matrix cell (`run`, Phase 1), grading a run and judge calibration (`grade`, `grade --calibrate`, Phase 2), `report`/`diff`/`gate`. Add them here as each lands.
+
+**Documented deviations live in `docs/deviations.md`.** Four so far, all from Phase 0: the three-tier hash that keeps arms paired, the `submit_answer` terminal tool, the fixed prose nudge in the loop, and tracking `.python-version`. Anything that bends an invariant below goes there in the same commit that bends it.
 
 ## What LoopGuard is
 

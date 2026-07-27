@@ -1,0 +1,80 @@
+# LoopGuard baseline arm.
+#
+# Two tiers, and the split is load-bearing (TRD 5.1):
+#   semantic.*  -- hashed into config_hash; anything that can move a result
+#   semantic.task.* -- hashed into task_hash; the only inputs that decide which
+#                      tasks exist, so baseline and mitigation share task seeds
+#                      and the comparison stays paired
+#   runtime.*   -- hashed into nothing; changing concurrency must not reseed tasks
+#
+# PENDING PHASE 0: semantic.provider and semantic.models are placeholders until
+# `loopguard smoke` has run against each candidate. Do not start a headline run
+# on unverified model strings.
+
+schema_version: "1.0"
+
+semantic:
+  task:
+    template: chained_entity_lookup_v1
+    depths: [1, 2, 3, 4, 5]
+    tasks_per_depth: 40
+    repeats: 3
+    # Set at Phase 1 exit, when configs/calibration.lock.json is frozen.
+    # `loopguard run` refuses to start on a mismatch.
+    calibration_lock_hash: null
+
+  arm: baseline
+
+  provider:
+    name: together
+    base_url: https://api.together.xyz/v1
+
+  models:
+    - id: llama-3.3-70b
+      provider_model: meta-llama/Llama-3.3-70B-Instruct-Turbo
+    - id: qwen3
+      provider_model: Qwen/Qwen3-235B-A22B-fp8-tput
+
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    max_tokens: 1024
+    seed_policy: derived
+
+  loop:
+    # null resolves to 2*d_max+4 = 14 and the resolved value is what gets hashed.
+    max_steps: null
+    max_completion_tokens: 8000
+
+  tools:
+    # Frozen with the calibration lock and sensitivity-checked at +/-1 in Phase 2
+    # (TRD 7.2): it moves the TOOL_MISUSE rate, so it is a real degree of freedom.
+    exploration_budget_per_hop: 2
+    # Every exposed tool must appear here. Tool-set size N is set at Phase 1
+    # calibration (TRD 14 expects 8-12); this list is the Phase-0 smoke set.
+    tags:
+      lookup_service: resolving
+      lookup_datacenter: resolving
+      lookup_region: resolving
+      lookup_service_legacy: resolving
+      search_entities: exploratory
+      list_regions: exploratory
+      submit_answer: terminal
+
+  prompt:
+    version: baseline_v1
+    path: prompts/baseline_v1.txt
+
+runtime:
+  out_dir: ../runs
+  api_key_env: TOGETHER_API_KEY
+  rate_limits:
+    max_concurrency: 4
+    requests_per_minute: 60
+    tokens_per_minute: 200000
+  retry:
+    max_attempts: 4
+    base_delay_s: 1.0
+    max_delay_s: 30.0
+  max_spend_usd: 25.0
+  log_level: INFO
